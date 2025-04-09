@@ -21,12 +21,34 @@ $monthNames = [
     'Desember'
 ];
 
+// After the existing code that sets $year and $month
+
+// Get all existing schedules to disable those months in the dropdown
+$existingSchedulesStmt = $pdo->prepare("SELECT year, month FROM schedules");
+$existingSchedulesStmt->execute();
+$existingSchedules = $existingSchedulesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Create a lookup array for easy checking
+$disabledMonths = [];
+foreach ($existingSchedules as $schedule) {
+    $key = $schedule['year'] . '-' . $schedule['month'];
+    $disabledMonths[$key] = true;
+}
+
+// Then in the HTML part where you render the month dropdown options:
+
 // Check if editing existing schedule
 $editMode = false;
 $scheduleId = null;
 $existingMuadzins = [];
 $year = date('Y');
 $month = date('n') - 1; // 0-based month for JavaScript
+
+// Check if year and month are provided in URL
+if (isset($_GET['year']) && isset($_GET['month'])) {
+    $year = (int)$_GET['year'];
+    $month = (int)$_GET['month'];
+}
 
 if (isset($_GET['id'])) {
     $scheduleId = (int)$_GET['id'];
@@ -38,6 +60,7 @@ if (isset($_GET['id'])) {
         $editMode = true;
         $year = $schedule['year'];
         $month = $schedule['month'];
+
 
         // Get existing muadzins
         $stmt = $pdo->prepare("SELECT * FROM schedule_details WHERE schedule_id = ?");
@@ -195,8 +218,17 @@ $fridays = getFridaysInMonth($year, $month);
                         <select id="month" name="month"
                             class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <?php for ($i = 0; $i < 12; $i++): ?>
-                                <option value="<?php echo $i; ?>" <?php echo $i == $month ? 'selected' : ''; ?>>
+                                <?php 
+                                    $isDisabled = isset($disabledMonths[$year . '-' . $i]) && !$editMode;
+                                    $disabledAttr = $isDisabled ? 'disabled' : '';
+                                    $optionClass = $isDisabled ? 'text-gray-400 bg-gray-100' : '';
+                                ?>
+                                <option value="<?php echo $i; ?>" 
+                                    <?php echo $i == $month ? 'selected' : ''; ?> 
+                                    <?php echo $disabledAttr; ?>
+                                    class="<?php echo $optionClass; ?>">
                                     <?php echo $monthNames[$i]; ?>
+                                    <?php echo $isDisabled ? ' (Sudah Ada)' : ''; ?>
                                 </option>
                             <?php endfor; ?>
                         </select>
@@ -279,7 +311,13 @@ $fridays = getFridaysInMonth($year, $month);
             document.getElementById('selectedYear').textContent = year;
 
             // Reload page with new year/month to update Fridays
-            window.location.href = `generator.php?year=${year}&month=${monthSelect.value}${<?php echo $editMode ? "+'&id=$scheduleId'" : "''"; ?>}`;
+            const url = new URL(window.location.href);
+            url.searchParams.set('year', year);
+            url.searchParams.set('month', monthSelect.value);
+            <?php if ($editMode): ?>
+                url.searchParams.set('id', '<?php echo $scheduleId; ?>');
+            <?php endif; ?>
+            window.location.href = url.toString();
         }
     </script>
 </body>
